@@ -2987,7 +2987,7 @@ ngx_http_upstream_check_status_json_format(ngx_buf_t *b,
     b->last = ngx_snprintf(b->last, b->end - b->last,
             "{\"servers\": {\n"
             "  \"total\": %ui,\n"
-            "  \"generation\": %ui,\n"
+            "  \"generation\": %ui,\n",
             count,
             ngx_http_upstream_check_shm_generation);
 
