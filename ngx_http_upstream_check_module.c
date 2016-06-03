@@ -2924,7 +2924,6 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
                 peer[i].shm->fall_count,
                 &peer[i].conf->check_type_conf->name,
                 peer[i].conf->port,
-                peer[i].conf->check_type_conf->name,
                 event_time_str,
                 (int)((ngx_current_msec - peer[i].shm->last_event_time) / 1000));
     }
