@@ -2874,7 +2874,8 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
             "    <th>Fall counts</th>\n"
             "    <th>Check type</th>\n"
             "    <th>Check port</th>\n"
-            "    <th>Uptime / First failure</th>\n"
+            "    <th>Uptime or First failure since</th>\n"
+            "    <th>Elapse in seconds</th>\n"
             "  </tr>\n",
             count, ngx_http_upstream_check_shm_generation);
 
@@ -2911,7 +2912,8 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
                 "    <td>%ui</td>\n"
                 "    <td>%V</td>\n"
                 "    <td>%ui</td>\n"
-                "    <td>%s since %s (%d seconds elapsed)</td>\n"
+                "    <td>%s</td>\n"
+                "    <td>%d</td>\n"
                 "  </tr>\n",
                 peer[i].shm->down ? " bgcolor=\"#FF0000\"" : "",
                 i,
@@ -2923,7 +2925,6 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
                 &peer[i].conf->check_type_conf->name,
                 peer[i].conf->port,
                 peer[i].conf->check_type_conf->name,
-                peer[i].shm->down ? "Down": "Up",
                 event_time_str,
                 (int)((ngx_current_msec - peer[i].shm->last_event_time) / 1000));
     }
