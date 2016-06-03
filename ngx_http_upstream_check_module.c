@@ -2978,7 +2978,8 @@ ngx_http_upstream_check_status_csv_format(ngx_buf_t *b,
                 &peer[i].conf->check_type_conf->name,
                 peer[i].conf->port,
                 event_time_str,
-                (int)((ngx_current_msec - peer[i].shm->last_event_time) / 1000);
+                (int)((ngx_current_msec - peer[i].shm->last_event_time) / 1000)
+        );
     }
 }
 
@@ -3064,9 +3065,10 @@ ngx_http_upstream_check_status_json_format(ngx_buf_t *b,
                 peer[i].shm->fall_count,
                 &peer[i].conf->check_type_conf->name,
                 peer[i].conf->port,
-		event_time_str,
-		(int)((ngx_current_msec - peer[i].shm->last_event_time) / 1000,
-                (i == last) ? "" : ",");
+                event_time_str,
+                (int)((ngx_current_msec - peer[i].shm->last_event_time) / 1000),
+                (i == last) ? "" : ","
+        );
     }
 
     b->last = ngx_snprintf(b->last, b->end - b->last,
