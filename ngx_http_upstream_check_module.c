@@ -78,6 +78,7 @@ typedef struct {
     ngx_pid_t                                owner;
 
     ngx_msec_t                               access_time;
+    ngx_msec_t                               last_event_time;
 
     ngx_uint_t                               fall_count;
     ngx_uint_t                               rise_count;
@@ -753,6 +754,9 @@ static ngx_check_status_command_t ngx_check_status_commands[] =  {
     { ngx_null_string, NULL }
 };
 
+static char *week[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+static char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
 static ngx_uint_t ngx_http_upstream_check_shm_generation = 0;
 static ngx_http_upstream_check_peers_t *check_peers_ctx = NULL;
@@ -2511,8 +2515,8 @@ ngx_http_upstream_check_status_update(ngx_http_upstream_check_peer_t *peer,
     if (result) {
         peer->shm->rise_count++;
         peer->shm->fall_count = 0;
-        if (peer->shm->down && peer->shm->rise_count >= ucscf->rise_count) {
-            peer->shm->down = 0;
+        if (peer->shm->rise_count >= ucscf->rise_count && peer->shm->down == 1 && ngx_atomic_cmp_set(&peer->shm->down, 1, 0)) {
+            peer->shm->last_event_time = ngx_current_msec;
             ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                           "enable check peer: %V ",
                           &peer->check_peer_addr->name);
@@ -2520,8 +2524,8 @@ ngx_http_upstream_check_status_update(ngx_http_upstream_check_peer_t *peer,
     } else {
         peer->shm->rise_count = 0;
         peer->shm->fall_count++;
-        if (!peer->shm->down && peer->shm->fall_count >= ucscf->fall_count) {
-            peer->shm->down = 1;
+        if (peer->shm->fall_count >= ucscf->fall_count && peer->shm->down == 0 && ngx_atomic_cmp_set(&peer->shm->down, 0, 1)) {
+            peer->shm->last_event_time = ngx_current_msec;
             ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                           "disable check peer: %V ",
                           &peer->check_peer_addr->name);
@@ -2871,11 +2875,19 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
             "    <th>Fall counts</th>\n"
             "    <th>Check type</th>\n"
             "    <th>Check port</th>\n"
+            "    <th>Uptime / First failure</th>\n"
             "  </tr>\n",
             count, ngx_http_upstream_check_shm_generation);
 
     for (i = 0; i < peers->peers.nelts; i++) {
-
+        u_char event_time_str[sizeof("Mon, 28 Sep 1970 06:00:00 UTC")];
+        ngx_tm_t tm;
+        ngx_gmtime(peer_shm[i].last_event_time / 1000, &tm);
+        (void) ngx_sprintf(event_time_str,
+                           "%s, %02d %s %4d %02d:%02d:%02d UTC",
+                           week[tm.ngx_tm_wday], tm.ngx_tm_mday,
+                           months[tm.ngx_tm_mon - 1], tm.ngx_tm_year,
+                           tm.ngx_tm_hour, tm.ngx_tm_min, tm.ngx_tm_sec);
         if (flag & NGX_CHECK_STATUS_DOWN) {
 
             if (!peer[i].shm->down) {
@@ -2899,6 +2911,7 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
                 "    <td>%ui</td>\n"
                 "    <td>%V</td>\n"
                 "    <td>%ui</td>\n"
+                "    <td>%s since %s (%d seconds elapsed)</td>\n"
                 "  </tr>\n",
                 peer[i].shm->down ? " bgcolor=\"#FF0000\"" : "",
                 i,
@@ -2908,7 +2921,12 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
                 peer[i].shm->rise_count,
                 peer[i].shm->fall_count,
                 &peer[i].conf->check_type_conf->name,
-                peer[i].conf->port);
+                peer[i].conf->port,
+                peer[i].conf->check_type_conf->name,
+                peer[i].down ? "Down": "Up",
+                event_time_str,
+                (int)((ngx_current_msec - peer[i].last_event_time) / 1000)
+	);
     }
 
     b->last = ngx_snprintf(b->last, b->end - b->last,
@@ -4000,24 +4018,26 @@ ngx_http_upstream_check_init_shm_peer(ngx_http_upstream_check_peer_shm_t *psh,
     u_char  *file;
 
     if (opsh) {
-        psh->access_time  = opsh->access_time;
-        psh->access_count = opsh->access_count;
+        psh->access_time     = opsh->access_time;
+        psh->access_count    = opsh->access_count;
 
-        psh->fall_count   = opsh->fall_count;
-        psh->rise_count   = opsh->rise_count;
-        psh->busyness     = opsh->busyness;
+        psh->fall_count      = opsh->fall_count;
+        psh->rise_count      = opsh->rise_count;
+        psh->busyness        = opsh->busyness;
 
-        psh->down         = opsh->down;
+        psh->down            = opsh->down;
+        psh->last_event_time = opsh->last_event_time;
 
     } else {
-        psh->access_time  = 0;
-        psh->access_count = 0;
+        psh->access_time     = 0;
+        psh->access_count    = 0;
 
-        psh->fall_count   = 0;
-        psh->rise_count   = 0;
-        psh->busyness     = 0;
+        psh->fall_count      = 0;
+        psh->rise_count      = 0;
+        psh->busyness        = 0;
 
-        psh->down         = init_down;
+        psh->down            = init_down;
+        psh->last_event_time = ngx_current_msec;
     }
 
 #if (NGX_HAVE_ATOMIC_OPS)
