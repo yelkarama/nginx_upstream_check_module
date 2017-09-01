@@ -3059,6 +3059,9 @@ ngx_http_upstream_check_status_json_format(ngx_buf_t *b,
 			downCount,
             ngx_http_upstream_check_shm_generation);
 
+    b->last = ngx_snprintf(b->last, b->end - b->last,
+            "  \"server\": [\n");
+
     last = peers->peers.nelts - 1;
     for (i = 0; i < peers->peers.nelts; i++) {
         u_char event_time_str[sizeof("Mon, 28 Sep 1970 06:00:00 UTC")];
@@ -3084,7 +3087,7 @@ ngx_http_upstream_check_status_json_format(ngx_buf_t *b,
         }
 
         b->last = ngx_snprintf(b->last, b->end - b->last,
-                "  \"server%ui\": { "
+                "{\"index\": %ui, "
                 "\"upstream\": \"%V\", "
                 "\"name\": \"%V\", "
                 "\"status\": \"%s\", "
@@ -3110,7 +3113,7 @@ ngx_http_upstream_check_status_json_format(ngx_buf_t *b,
     }
 
     b->last = ngx_snprintf(b->last, b->end - b->last,
-            "}}\n");
+            "]}}\n");
 }
 
 
