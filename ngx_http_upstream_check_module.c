@@ -734,6 +734,10 @@ static ngx_check_conf_t  ngx_check_types[] = {
 
 static ngx_check_status_conf_t  ngx_check_status_formats[] = {
 
+    { ngx_string("prometheus"),
+      ngx_string("text/plain"),
+      ngx_http_upstream_check_status_prometheus_format },
+
     { ngx_string("html"),
       ngx_string("text/html"),
       ngx_http_upstream_check_status_html_format },
@@ -745,10 +749,6 @@ static ngx_check_status_conf_t  ngx_check_status_formats[] = {
     { ngx_string("json"),
       ngx_string("application/json"), /* RFC 4627 */
       ngx_http_upstream_check_status_json_format },
-
-    { ngx_string("prometheus"),
-      ngx_string("text/plain"),
-      ngx_http_upstream_check_status_prometheus_format },
 
     { ngx_null_string, ngx_null_string, NULL }
 };
@@ -3872,7 +3872,7 @@ static char *
 ngx_http_upstream_check_merge_loc_conf(ngx_conf_t *cf, void *parent,
     void *child)
 {
-    ngx_str_t                            format = ngx_string("html");
+    ngx_str_t                            format = ngx_string("prometheus");
     ngx_http_upstream_check_loc_conf_t  *prev = parent;
     ngx_http_upstream_check_loc_conf_t  *conf = child;
 
