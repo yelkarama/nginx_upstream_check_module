@@ -422,6 +422,8 @@ static void ngx_http_upstream_check_status_csv_format(ngx_buf_t *b,
     ngx_http_upstream_check_peers_t *peers, ngx_uint_t flag);
 static void ngx_http_upstream_check_status_json_format(ngx_buf_t *b,
     ngx_http_upstream_check_peers_t *peers, ngx_uint_t flag);
+static void ngx_http_upstream_check_status_prometheus_format(ngx_buf_t *b,
+    ngx_http_upstream_check_peers_t *peers, ngx_uint_t flag);
 
 static ngx_int_t ngx_http_upstream_check_addr_change_port(ngx_pool_t *pool,
     ngx_addr_t *dst, ngx_addr_t *src, ngx_uint_t port);
@@ -743,6 +745,10 @@ static ngx_check_status_conf_t  ngx_check_status_formats[] = {
     { ngx_string("json"),
       ngx_string("application/json"), /* RFC 4627 */
       ngx_http_upstream_check_status_json_format },
+
+    { ngx_string("prometheus"),
+      ngx_string("text/plain"),
+      ngx_http_upstream_check_status_prometheus_format },
 
     { ngx_null_string, ngx_null_string, NULL }
 };
@@ -3114,6 +3120,89 @@ ngx_http_upstream_check_status_json_format(ngx_buf_t *b,
 
     b->last = ngx_snprintf(b->last, b->end - b->last,
             "]}}\n");
+}
+
+
+static void
+ngx_http_upstream_check_status_prometheus_format(ngx_buf_t *b,
+    ngx_http_upstream_check_peers_t *peers, ngx_uint_t flag)
+{
+    ngx_uint_t                       count, upCount, downCount, i, last;
+    ngx_http_upstream_check_peer_t  *peer;
+
+    peer = peers->peers.elts;
+
+    count = 0;
+	upCount = 0;
+	downCount = 0;
+
+    for (i = 0; i < peers->peers.nelts; i++) {
+
+        if (flag & NGX_CHECK_STATUS_DOWN) {
+
+            if (!peer[i].shm->down) {
+                continue;
+            }
+
+        } else if (flag & NGX_CHECK_STATUS_UP) {
+
+            if (peer[i].shm->down) {
+                continue;
+            }
+        }
+
+        count++;
+		if (peer[i].shm->down) {
+			downCount++;
+		} else {
+			upCount++;
+		}
+    }
+
+    b->last = ngx_snprintf(b->last, b->end - b->last,
+            "# HELP nginx_upstream_count_total Nginx total number of servers\n"
+            "# TYPE nginx_upstream_count_total gauge\n"
+            "nginx_upstream_count_total %ui\n"
+            "# HELP nginx_upstream_count_up Nginx total number of servers that are UP\n"
+            "# TYPE nginx_upstream_count_up gauge\n"
+            "nginx_upstream_count_up %ui\n"
+            "# HELP nginx_upstream_count_down Nginx total number of servers that are DOWN\n"
+            "# TYPE nginx_upstream_count_down gauge\n"
+            "nginx_upstream_count_down %ui\n"
+            "# HELP nginx_upstream_count_generation Nginx generation\n"
+            "# TYPE nginx_upstream_count_generation gauge\n"
+            "nginx_upstream_count_generation %ui\n",
+            count,
+			upCount,
+			downCount,
+            ngx_http_upstream_check_shm_generation);
+
+    last = peers->peers.nelts - 1;
+    for (i = 0; i < peers->peers.nelts; i++) {
+        if (flag & NGX_CHECK_STATUS_DOWN) {
+            if (!peer[i].shm->down) {
+                continue;
+            }
+        } else if (flag & NGX_CHECK_STATUS_UP) {
+            if (peer[i].shm->down) {
+                continue;
+            }
+        }
+
+        b->last = ngx_snprintf(b->last, b->end - b->last,
+                "# HELP nginx_upstream_server Nginx connections\n"
+                "# TYPE nginx_upstream_server gauge\n"
+                "nginx_upstream_server{index=\"%ui\",upstream=\"%V\",name=\"%V\",status=\"%s\",rise=\"%ui\",fall=\"%ui\",type=\"%V\",port=\"%ui\",elapse=\"%d\"} 1\n",
+                i,
+                peer[i].upstream_name,
+                &peer[i].peer_addr->name,
+                peer[i].shm->down ? "down" : "up",
+                peer[i].shm->rise_count,
+                peer[i].shm->fall_count,
+                &peer[i].conf->check_type_conf->name,
+                peer[i].conf->port,
+                (int)((ngx_current_msec - peer[i].shm->last_event_time) / 1000));
+    }
 }
 
 
