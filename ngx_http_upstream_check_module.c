@@ -3178,6 +3178,34 @@ ngx_http_upstream_check_status_prometheus_format(ngx_buf_t *b,
             ngx_http_upstream_check_shm_generation);
 
     last = peers->peers.nelts - 1;
+	
+	b->last = ngx_snprintf(b->last, b->end - b->last,
+			"# HELP nginx_upstream_server_rise Nginx rise counter\n"
+			"# TYPE nginx_upstream_server_rise counter\n");
+    for (i = 0; i < peers->peers.nelts; i++) {
+        if (flag & NGX_CHECK_STATUS_DOWN) {
+            if (!peer[i].shm->down) {
+                continue;
+            }
+        } else if (flag & NGX_CHECK_STATUS_UP) {
+            if (peer[i].shm->down) {
+                continue;
+            }
+        }
+        b->last = ngx_snprintf(b->last, b->end - b->last,
+                "nginx_upstream_server_rise{index=\"%ui\",upstream=\"%V\",name=\"%V\",status=\"%s\",type=\"%V\",port=\"%ui\"} %ui\n",
+                i,
+                peer[i].upstream_name,
+                &peer[i].peer_addr->name,
+                peer[i].shm->down ? "down" : "up",
+                &peer[i].conf->check_type_conf->name,
+                peer[i].conf->port,
+                peer[i].shm->rise_count);
+    }
+	
+	b->last = ngx_snprintf(b->last, b->end - b->last,
+		"# HELP nginx_upstream_server_fall Nginx fall counter\n"
+		"# TYPE nginx_upstream_server_fall counter\n");
     for (i = 0; i < peers->peers.nelts; i++) {
         if (flag & NGX_CHECK_STATUS_DOWN) {
             if (!peer[i].shm->down) {
@@ -3190,18 +3218,37 @@ ngx_http_upstream_check_status_prometheus_format(ngx_buf_t *b,
         }
 
         b->last = ngx_snprintf(b->last, b->end - b->last,
-                "# HELP nginx_upstream_server Nginx connections\n"
-                "# TYPE nginx_upstream_server gauge\n"
-                "nginx_upstream_server{index=\"%ui\",upstream=\"%V\",name=\"%V\",status=\"%s\",rise=\"%ui\",fall=\"%ui\",type=\"%V\",port=\"%ui\",elapse=\"%d\"} 1\n",
+                "nginx_upstream_server_fall{index=\"%ui\",upstream=\"%V\",name=\"%V\",status=\"%s\",type=\"%V\",port=\"%ui\"} %ui\n",
                 i,
                 peer[i].upstream_name,
                 &peer[i].peer_addr->name,
                 peer[i].shm->down ? "down" : "up",
-                peer[i].shm->rise_count,
-                peer[i].shm->fall_count,
                 &peer[i].conf->check_type_conf->name,
                 peer[i].conf->port,
-                (int)((ngx_current_msec - peer[i].shm->last_event_time) / 1000));
+                peer[i].shm->fall_count);
+    }
+	
+	b->last = ngx_snprintf(b->last, b->end - b->last,
+		"# HELP nginx_upstream_server_active Nginx active 1 for UP / 0 for DOWN\n"
+		"# TYPE nginx_upstream_server_active gauge\n");
+    for (i = 0; i < peers->peers.nelts; i++) {
+        if (flag & NGX_CHECK_STATUS_DOWN) {
+            if (!peer[i].shm->down) {
+                continue;
+            }
+        } else if (flag & NGX_CHECK_STATUS_UP) {
+            if (peer[i].shm->down) {
+                continue;
+            }
+        }
+        b->last = ngx_snprintf(b->last, b->end - b->last,
+                "nginx_upstream_server_active{index=\"%ui\",upstream=\"%V\",name=\"%V\",type=\"%V\",port=\"%ui\"} %ui\n",
+                i,
+                peer[i].upstream_name,
+                &peer[i].peer_addr->name,
+                &peer[i].conf->check_type_conf->name,
+                peer[i].conf->port,
+                peer[i].shm->down ? 0 : 1);
     }
 }
 
